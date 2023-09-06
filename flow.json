@@ -1,0 +1,38 @@
+{
+	"contracts": {
+		"DexSyncSwap": "./contracts/DexSyncSwap.cdc"
+	},
+	"networks": {
+		"emulator": "127.0.0.1:3569",
+		"mainnet": "access.mainnet.nodes.onflow.org:9000",
+		"sandboxnet": "access.sandboxnet.nodes.onflow.org:9000",
+		"testnet": "access.devnet.nodes.onflow.org:9000"
+	},
+	"accounts": {
+		"Pool-based-dex": {
+			"address": "d12d2d958d4a2ce6",
+			"key": {
+				"type": "file",
+				"location": "Pool-based-dex.pkey"
+			}
+		},
+		"dexSyncSwap": {
+			"address": "1892acb0b380cc30",
+			"key": {
+				"type": "file",
+				"location": "dexSyncSwap.pkey"
+			}
+		},
+		"emulator-account": {
+			"address": "f8d6e0586b0a20c7",
+			"key": "4044547e4208ca942dd0d44101467e725939c9bbce2c4171dcd1de02b1543f11"
+		}
+	},
+	"deployments": {
+		"testnet": {
+			"dexSyncSwap": [
+				"DexSyncSwap"
+			]
+		}
+	}
+}
