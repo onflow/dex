@@ -88,9 +88,9 @@ pub contract DexSyncSwap {
                 result >= minimumTargetTokenAmount: "Minimum target token amount was not received during the swap"
                 DexSyncSwap.emitSwapEvent(
                     receiverAddress: recipient.address,
-                    sourceTokenAmount: sourceVault.balance,
+                    sourceTokenAmount: before(sourceVault.balance),
                     receivedTargetTokenAmount: result,
-                    sourceToken: sourceVault.getType(),
+                    sourceToken: before(sourceVault.getType()),
                     targetToken: recipient.borrow()!.getSupportedVaultTypes().keys.length == 1 ? recipient.borrow()!.getSupportedVaultTypes().keys[0] : nil
                 )
             }
@@ -138,9 +138,9 @@ pub contract DexSyncSwap {
                 result.balance >= minimumTargetTokenAmount : "Unable to perform exact source to target token swap"
                 DexSyncSwap.emitSwapEvent(
                     receiverAddress: nil,
-                    sourceTokenAmount: sourceVault.balance,
+                    sourceTokenAmount: before(sourceVault.balance),
                     receivedTargetTokenAmount: result.balance,
-                    sourceToken: sourceVault.getType(),
+                    sourceToken: before(sourceVault.getType()),
                     targetToken: result.getType()
                 )
             } 
@@ -192,9 +192,9 @@ pub contract DexSyncSwap {
                 result == exactTargetAmount: "Token swap failed because the return amount did not match the specified exactTargetAmount"
                 DexSyncSwap.emitSwapEvent(
                     receiverAddress: recipient.address,
-                    sourceTokenAmount: sourceVault.balance - remainingSourceTokenRecipient.borrow()!.balance,
+                    sourceTokenAmount: before(sourceVault.balance) - remainingSourceTokenRecipient.borrow()!.balance,
                     receivedTargetTokenAmount: exactTargetAmount,
-                    sourceToken: sourceVault.getType(),
+                    sourceToken: before(sourceVault.getType()),
                     targetToken: recipient.borrow()!.getSupportedVaultTypes().keys.length == 1 ? recipient.borrow()!.getSupportedVaultTypes().keys[0] : nil
                 )
             }
@@ -241,9 +241,9 @@ pub contract DexSyncSwap {
                 result.targetTokenVault.balance == exactTargetAmount : "Token swap failed because the return targetTokenVault balance did not match the specified exactTargetAmount"
                 DexSyncSwap.emitSwapEvent(
                     receiverAddress: nil,
-                    sourceTokenAmount: sourceVault.balance - result.remainingSourceTokenVaultAmount,
+                    sourceTokenAmount: before(sourceVault.balance) - result.remainingSourceTokenVaultAmount,
                     receivedTargetTokenAmount: exactTargetAmount,
-                    sourceToken: sourceVault.getType(),
+                    sourceToken: before(sourceVault.getType()),
                     targetToken: result.targetTokenVault.getType()
                 )
             } 
