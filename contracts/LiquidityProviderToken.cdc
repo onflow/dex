@@ -2,6 +2,7 @@ import FungibleToken from "FungibleToken"
 import MetadataViews from "MetadataViews"
 import FungibleTokenMetadataViews from "FungibleTokenMetadataViews"
 import LiquidityProviderTokenView from "LiquidityProviderTokenView"
+import LiquidityProviderTokenAdmin from "LiquidityProviderTokenAdmin"
 
 pub contract LiquidityProviderToken: FungibleToken {
 
@@ -131,7 +132,7 @@ pub contract LiquidityProviderToken: FungibleToken {
                     let medias = MetadataViews.Medias([media])
                     return FungibleTokenMetadataViews.FTDisplay(
                         name: "Liquidity Fungible Token",
-                        symbol: "LPFT",
+                        symbol: "LPFT-".concat(LiquidityProviderToken.pairId),
                         description: "This fungible token is used as an example to help you develop your next FT #onFlow.",
                         externalURL: MetadataViews.ExternalURL("https://example-ft.onflow.org"),
                         logos: medias,
@@ -170,17 +171,10 @@ pub contract LiquidityProviderToken: FungibleToken {
         return <-create Vault(balance: 0.0)
     }
 
-    pub resource interface IAdministrator {
-
-        pub fun mintTokens(amount: UFix64): @LiquidityProviderToken.Vault
-
-        pub fun burnTokens(from: @FungibleToken.Vault)
-    }
-
 
     /// Resource object that token admin accounts can hold to mint/burn new tokens.
     ///
-    pub resource Administrator: IAdministrator {
+    pub resource Administrator: LiquidityProviderTokenAdmin.Administrator {
 
         /// Function that mints new tokens, adds them to the total supply,
         /// and returns them to the calling context.
@@ -188,13 +182,13 @@ pub contract LiquidityProviderToken: FungibleToken {
         /// @param amount: The quantity of tokens to mint
         /// @return The Vault resource containing the minted tokens
         ///
-        pub fun mintTokens(amount: UFix64): @LiquidityProviderToken.Vault {
+        pub fun mintTokens(amount: UFix64): @FungibleToken.Vault {
             pre {
                 amount > 0.0: "Amount minted must be greater than zero"
             }
             LiquidityProviderToken.totalSupply = LiquidityProviderToken.totalSupply + amount
             emit TokensMinted(amount: amount)
-            return <-create Vault(balance: amount)
+            return <-create Vault(balance: amount) as! @FungibleToken.Vault
         }
 
         /// Function that destroys a Vault instance, effectively burning the tokens.
@@ -214,17 +208,15 @@ pub contract LiquidityProviderToken: FungibleToken {
         init() {}
     }
 
-    init(
-        pairId: String
-    ): @Administrator {
+    init(pairId: UInt64)
+    {
         self.totalSupply = 0.0
         self.pairId = pairId
         self.VaultStoragePath = StoragePath(identifier: pairId.concat("-").concat("LiquidityProviderTokenVault"))!
         self.VaultPublicPath = PublicPath(identifier: pairId.concat("-").concat("LiquidityProviderTokenMetadata"))!
         self.ReceiverPublicPath = PublicPath(identifier: pairId.concat("-").concat("LiquidityProviderTokenReceiver"))!
         self.AdminStoragePath = StoragePath(identifier: pairId.concat("-").concat("LiquidityProviderTokenAdmin"))!
+        self.account.save(<- create Administrator(), to: /storage/LiquidityProviderTokenAdminstrator)
         emit TokensInitialized(initialSupply: 0.0)
-
-        return <- create Administrator()
     }
 }

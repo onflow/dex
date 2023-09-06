@@ -3,27 +3,28 @@ import FlowToken from 0x0ae53cb6e3f42a79
 import FungibleToken from "FungibleToken"
 import Math from "Math"
 import FungibleTokenPair from "FungibleTokenPair"
-import PairExample from "FungibleTokenPairExample"
+import FungibleTokenPairExample from "FungibleTokenPairExample"
 
-/**
 
-Factory is responsible for creating new pools and querying existing pools.
-
- */
-
-pub contract Factory {
+/// Factory is responsible for creating new pools and querying existing pools.
+pub contract PairFactory {
 
     access(contract) let FlowTokenReceiverPath: PublicPath
     access(contract) let PoolStoragePath: StoragePath
     pub let PoolPublicPath: PublicPath
 
-    // Event that is emitted when the contract is created
-    pub event ContractInitialized()
-
     /// A mapping from pair hash to pool id (pool owner's address in UInt64)
     access(contract) let pairHashToPoolId: {String: UInt64}
+    /// A mapping to keep track of the address of the pool corresponding to the poolId
+    access(contract) let poolIdToPoolAddress: {UInt64: Address}
     /// An array of pool ids (pool owner's addresses in UInt64) in their creation order
     access(self) let pools: [UInt64]
+
+    /// Fees to store the LiquidityProviderToken contract and its operation
+    pub let OPERATIONAL_FEES: UFix64
+
+    // Event that is emitted when the contract is created
+    pub event ContractInitialized()
 
     /// Creates a new liquidity pool resource for the given token pair,
     /// and stores the new resource in a new account.
@@ -38,17 +39,17 @@ pub contract Factory {
         fees: @FungibleToken.Vault
     ): UInt64 {
         pre {
-            vaultA.balance == 0.0: "Factory: Pool creation requires empty vaults"
-            vaultB.balance == 0.0: "Factory: Pool creation requires empty vaults"
-            fees.balance >= FlowStorageFees.minimumStorageReservation:
-                "Factory: Expecting minimum storage fees for account creation"
+            vaultA.balance == 0.0: "Pool creation requires empty vaults"
+            vaultB.balance == 0.0: "Pool creation requires empty vaults"
+            fees.balance >= FlowStorageFees.minimumStorageReservation + OPERATIONAL_FEES :
+                "Expecting minimum storage fees for account creation"
         }
 
         // deposits fees for account creation
         let receiverRef = self.account
             .getCapability(self.FlowTokenReceiverPath)
             .borrow<&FlowToken.Vault{FungibleToken.Receiver}>()
-            ?? panic("Factory: Could not borrow receiver reference to the Flow Token Vault")
+            ?? panic("Could not borrow receiver reference to the Flow Token Vault")
         receiverRef.deposit(from: <- fees)
 
         // computes the hash strings for both (A, B) and (B, A)
@@ -65,7 +66,7 @@ pub contract Factory {
 
         assert(
             !self.pairHashToPoolId.containsKey(pairABHash) && !self.pairHashToPoolId.containsKey(pairBAHash),
-            message: "Factory: Pool already exists for this pair"
+            message: "Pool already exists for this pair"
         )
 
         // creates a new account without an owner (public key)
@@ -75,14 +76,16 @@ pub contract Factory {
         let newPoolId = Math.addressToUInt64(address: newAccount.address)
 
         // creates the new liquidity pool resource
-        let newPool <- PairExample.createPool(vaultA: <-vaultA, vaultB: <-vaultB, poolId: newPoolId)
+        let newPool <- FungibleTokenPairExample.createPool(vaultA: <-vaultA, vaultB: <-vaultB, poolId: newPoolId, poolAccount: newAccount)
 
         // stores the new pool into the new account
         newAccount.save(<-newPool, to: self.PoolStoragePath)
-        newAccount.link<&PairExample.Pool{Pair.IPool}>(self.PoolPublicPath, target: self.PoolStoragePath)
+        newAccount.link<&FungibleTokenPairExample.Pool{FungibleTokenPair.FungibleTokenPool}>(self.PoolPublicPath, target: self.PoolStoragePath)
         // registers the pairs (A, B) and (B, A), assigns them to the same pool
         self.pairHashToPoolId[pairABHash] = newPoolId
         self.pairHashToPoolId[pairBAHash] = newPoolId
+        // register the poolAddress corresponds to poolId
+        self.poolIdToPoolAddress[newPoolId] = newAccount.address
         // also appends the new pool id to `self.pools`
         self.pools.append(newPoolId)
 
@@ -96,7 +99,7 @@ pub contract Factory {
     // @param tokenBType The type of token B's vault
     // @return The resource reference of the requested liquidity pool, or nil
     //  if there's no liquidity pool for the token pair
-    pub fun getPoolByTypes(tokenAType: Type, tokenBType: Type): &PairExample.Pool{Pair.IPool}? {
+    pub fun getPoolByTypes(tokenAType: Type, tokenBType: Type): &FungibleTokenPairExample.Pool{FungibleTokenPair.FungibleTokenPool}? {
         let pairHash = self.getPairHash(
             tokenATypeIdentifier: tokenAType.identifier,
             tokenBTypeIdentifier: tokenBType.identifier
@@ -115,7 +118,7 @@ pub contract Factory {
     /// @param tokenBTypeIdentifier The type identifier of token B's vault
     /// @return The resource reference of the requested liquidity pool, or nil
     ///  if there's no liquidity pool for the token pair
-    pub fun getPoolByTypeIdentifiers(tokenATypeIdentifier: String, tokenBTypeIdentifier: String): &PairExample.Pool{Pair.IPool}? {
+    pub fun getPoolByTypeIdentifiers(tokenATypeIdentifier: String, tokenBTypeIdentifier: String): &FungibleTokenPairExample.Pool{FungibleTokenPair.FungibleTokenPool}? {
         let pairHash = self.getPairHash(
             tokenATypeIdentifier: tokenATypeIdentifier,
             tokenBTypeIdentifier: tokenBTypeIdentifier
@@ -145,10 +148,10 @@ pub contract Factory {
     ///
     /// @param poolId The pool id representing the pool owner's address
     /// @return The resource reference of the requested liquidity pool
-    pub fun getPoolById(poolId: UInt64): &PairExample.Pool{Pair.IPool} {
+    pub fun getPoolById(poolId: UInt64): &FungibleTokenPairExample.Pool{FungibleTokenPair.FungibleTokenPool} {
         let address = Address(poolId)
-        return getAccount(address).getCapability<&PairExample.Pool{Pair.IPool}>(self.PoolPublicPath).borrow()
-            ?? panic("Factory: Couldn't borrow pool from the account")
+        return getAccount(address).getCapability<&FungibleTokenPairExample.Pool{FungibleTokenPair.FungibleTokenPool}>(self.PoolPublicPath).borrow()
+            ?? panic("Couldn't borrow pool from the account")
     }
 
     init() {
@@ -156,7 +159,9 @@ pub contract Factory {
         self.PoolStoragePath = /storage/poolStoragePath
         self.PoolPublicPath = /public/poolPublicPath
         self.pairHashToPoolId = {}
+        self.poolIdToPoolAddress = {}
         self.pools = []
+        self.OPERATIONAL_FEES = 5.0 // 5 FLOW
 
         emit ContractInitialized()
     }

@@ -1,9 +1,9 @@
 import FungibleToken from "FungibleToken"
-import LiquidityProviderToken from "LiquidityProviderToken"
 import Math from "Math"
-import MultiFungibleToken from "MultiFungibleToken.cdc"
+import MultiFungibleToken from "MultiFungibleToken"
 import FungibleTokenPair from "FungibleTokenPair"
-import Settings from "Settings.cdc"
+import Settings from "Settings"
+import LiquidityProviderTokenAdmin from "LiquidityProviderTokenAdmin"
 
 /**
     Pair represents a token pair that can be swapped on the DEX.
@@ -16,8 +16,11 @@ pub contract FungibleTokenPairExample {
     pub event Burn(poolId: UInt64, amountLP: UFix64, amountAOut: UFix64, amountBOut: UFix64)
     /// The initial liquidity that will be minted and locked
     /// by the pool in order to avoid division by zero. It's fixed to 1e-5.
-    access(contract)  let MINIMUM_LIQUIDITY: UFix64
-    access(self) let LiquidityProviderTokenAdmin: @LiquidityProviderToken.Admin
+    pub let MINIMUM_LIQUIDITY: UFix64
+    /// Stores the LiquidityProviderToken code to make it deployable from the smart contract.
+    pub let LIQUIDITY_PAIR_TOKEN_CODE: [UInt8]
+    /// Storage path, Where `LiquidityProviderToken` Administrator resource stores.
+    pub let LPTOKEN_ADMIN_STORAGE_PATH: StoragePath
 
     pub resource Pool: FungibleTokenPair.FungibleTokenPool {
         pub let poolId: UInt64
@@ -25,6 +28,9 @@ pub contract FungibleTokenPairExample {
 
         pub let tokenAType: Type
         pub let tokenBType: Type
+
+        /// Transaction lock 
+        access(self) var lock: Bool
 
         access(self) var lastBlockTimestamp: UFix64
         // use Word64 instead of UFix64 because overflow is acceptable
@@ -34,9 +40,9 @@ pub contract FungibleTokenPairExample {
 
         access(self) let tokenAVault: @FungibleToken.Vault
         access(self) let tokenBVault: @FungibleToken.Vault
-        access(self) let LiquidityProviderTokenMaster: @LiquidityProviderToken.TokenMaster
+        access(self) let LiquidityProviderTokenMaster: @LiquidityProviderTokenAdmin.Administrator
 
-        pub fun burn(LiquidityProviderTokenVault: @MultiFungibleToken.Vault): @[FungibleToken.Vault; 2]  {
+        pub fun burn(LiquidityProviderTokenVault: @FungibleToken.Vault): @[FungibleToken.Vault; 2]  {
             pre {
                 !self.lock: "Pair: Reentrant call"
             }
@@ -53,8 +59,10 @@ pub contract FungibleTokenPairExample {
 
             let isFeeOn = self.mintFee(reserveALast: reserveALast, reserveBLast: reserveBLast)
 
+            // @todo figure out a way to fetch the total supply of the LpToken
+
             // note that totalSupply can update in mintFee
-            let totalSupply = Math.uFix64ToRawUInt256(LiquidityProviderToken.getTotalSupply(tokenId: self.poolId)!)
+            let totalSupply = Math.uFix64ToRawUInt256(self.getTotalSupplyOfLPToken())
             let liquidityUInt256 = Math.uFix64ToRawUInt256(liquidity)
 
             // amountA = liquidity * balanceA / totalSupply
@@ -280,11 +288,15 @@ pub contract FungibleTokenPairExample {
             }
         }
 
+        access(self) fun getTotalSupplyOfLPToken(): UFix64 {
+
+        }
+
         init(
             vaultA: @FungibleToken.Vault,
             vaultB: @FungibleToken.Vault,
-            LiquidityProviderTokenMaster: @LiquidityProviderToken.TokenMaster,
-            poolId: UInt64
+            poolId: UInt64,
+            LiquidityProviderTokenMaster: @LiquidityProviderTokenAdmin.Administrator
         ) {
             pre {
                 vaultA.balance == 0.0: "Pair: Pool creation requires empty vaults"
@@ -324,19 +336,29 @@ pub contract FungibleTokenPairExample {
         vaultA: @FungibleToken.Vault,
         vaultB: @FungibleToken.Vault,
         poolId: UInt64,
-        admin: @AnyResource{LiquidityProviderToken.IAdministrator}
+        poolAccount: AuthAccount
     ): @Pool {
         // Create a new instance of the LiquidityProviderToken.
-        LiquidityProviderToken(pairId: poolId.toString())
+        poolAccount.contracts.add(
+            name: "LiquidityProviderToken",
+            code: FungibleTokenPairExample.LIQUIDITY_PAIR_TOKEN_CODE,
+            poolId: poolId
+        )
+        // Move the admin resource from the poolAccount to the `Pool` resource.
+        let admin <- poolAccount.load<@LiquidityProviderTokenAdmin.Administrator>(from: FungibleTokenPairExample.LPTOKEN_ADMIN_STORAGE_PATH) ?? panic("Administrator resource does not exists")
+
+        // Create Pool
         return <-create FungibleTokenPairExample.Pool(
             vaultA: <-vaultA,
             vaultB: <-vaultB,
-            LiquidityProviderTokenMaster: <-admin,
-            poolId: poolId
+            poolId: poolId,
+            LiquidityProviderTokenMaster: <-admin
         )
     }
 
-    init() {
+    init(liquidityPairTokenCode: [UInt8]) {
         self.MINIMUM_LIQUIDITY = 0.00001
+        self.LIQUIDITY_PAIR_TOKEN_CODE = liquidityPairTokenCode
+        self.LPTOKEN_ADMIN_STORAGE_PATH = /storage/LiquidityProviderTokenAdminstrator
     }
 }

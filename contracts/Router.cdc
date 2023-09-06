@@ -1,7 +1,7 @@
 
-import "FLIP112"
+import DexSyncSwap from "DexSyncSwap"
 
-pub contract Router: FLIP112 {
+pub contract Router: DexSyncSwap {
 
     
 

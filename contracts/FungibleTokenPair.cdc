@@ -15,7 +15,7 @@ pub contract interface FungibleTokenPair {
         ///
         /// @param lpTokenVault The LP tokens to burn
         /// @return The withdrawn share of the pool as [token A vault, token B vault]
-        pub fun redeem(lpTokenVault: @FungibleToken.Vault): @[FungibleToken.Vault; 2] {
+        pub fun burn(lpTokenVault: @FungibleToken.Vault): @[FungibleToken.Vault; 2] {
             pre {
                 lpTokenVault.balance > 0.0: "Pair: Zero balance to burn"
             }
